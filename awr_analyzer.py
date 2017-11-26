@@ -58,8 +58,8 @@ class StatspackAnalyzer(object):
                             snap_data_profile[date] = {}
                             snap_data_cpu[date] = {}
 
-                        elif report_line.find("DB time:") >= 0:
-                            snap_data[date]["DB time"] = float(report_line_words[2].replace(",","")) * 60
+                        elif report_line.find("DB Time:") >= 0:
+                            snap_data[date]["DB Time"] = float(report_line_words[2].replace(",","")) * 60
 
                         elif report_line.startswith("Load Profile"):
                             load_profile_section = True
