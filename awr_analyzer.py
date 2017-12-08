@@ -1697,6 +1697,7 @@ class StatspackAnalyzer(object):
                 host_cpu_section = False
                 event_class_wait_sum = {}
                 db_version = "12"
+                line_of_db_version = 6
                 line_no = 0
                 for report_line in report_file:
                     line_no += 1
@@ -1704,7 +1705,10 @@ class StatspackAnalyzer(object):
                         report_line_words = report_line.split()
                         report_line_long_words = re.split("\s{2,}", report_line)
 
-                        if line_no == 6:
+                        if line_no == 2 and report_line.startswith("WARNING")>=0:
+                            line_of_db_version = 10
+                            
+                        elif line_no == line_of_db_version:
                             db_version = report_line_words[6]
 
                         elif report_line.find("Begin Snap:") >= 0:
@@ -1799,6 +1803,7 @@ class StatspackAnalyzer(object):
                     except BaseException as e:
                         print(e)
                         print(report_line)
+                        print(fname)
                         raise
 
         data_x = sorted(snap_data.keys())
