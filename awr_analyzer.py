@@ -74,7 +74,7 @@ class StatspackAnalyzer(object):
                                 if snap_data[date].get(class_name, -1) == -1:
                                     snap_data[date][class_name] = 0
 
-                        elif host_cpu_section and len(report_line_long_words) > 5 and \
+                        elif host_cpu_section and len(report_line_long_words) > 7 and \
                                 self.is_float(report_line_long_words[1]):
                             snap_data_cpu[date]["Begin"] = float(report_line_long_words[3])
                             snap_data_cpu[date]["End"] = float(report_line_long_words[4])
@@ -82,6 +82,16 @@ class StatspackAnalyzer(object):
                             snap_data_cpu[date]["System"] = float(report_line_long_words[6])
                             snap_data_cpu[date]["Idle"] = float(report_line_long_words[8])
                             snap_data_cpu[date]["WIO"] = float(report_line_long_words[7])
+                            host_cpu_section = False
+
+                        elif host_cpu_section and len(report_line_long_words) > 5 and \
+                                self.is_float(report_line_long_words[1]):
+                            snap_data_cpu[date]["Begin"] = float(report_line_long_words[1])
+                            snap_data_cpu[date]["End"] = float(report_line_long_words[2])
+                            snap_data_cpu[date]["User"] = float(report_line_long_words[3])
+                            snap_data_cpu[date]["System"] = float(report_line_long_words[4])
+                            snap_data_cpu[date]["Idle"] = float(report_line_long_words[5])
+                            snap_data_cpu[date]["WIO"] = float(report_line_long_words[6])
                             host_cpu_section = False
 
                         elif load_profile_section and len(report_line_long_words) > 2 and \
