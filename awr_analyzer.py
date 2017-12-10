@@ -1705,9 +1705,9 @@ class StatspackAnalyzer(object):
                         report_line_words = report_line.split()
                         report_line_long_words = re.split("\s{2,}", report_line)
 
-                        if line_no == 2 and report_line.startswith("WARNING")>=0:
+                        if line_no == 2 and report_line.find("WARNING") >= 0:
                             line_of_db_version = 10
-                            
+
                         elif line_no == line_of_db_version:
                             db_version = report_line_words[6]
 
@@ -1804,6 +1804,7 @@ class StatspackAnalyzer(object):
                         print(e)
                         print(report_line)
                         print(fname)
+                        print("version = " + db_version)
                         raise
 
         data_x = sorted(snap_data.keys())
