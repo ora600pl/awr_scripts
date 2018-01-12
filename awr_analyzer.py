@@ -7,7 +7,7 @@ from datetime import datetime
 from plotly import tools
 
 
-class StatspackAnalyzer(object):
+class AWRAnalyzer(object):
     def __init__(self, dirname, name_pattern):
         self.dirname = dirname
         self.name_pattern = name_pattern
@@ -1864,8 +1864,8 @@ class StatspackAnalyzer(object):
 
 if __name__ == '__main__':
     if len(sys.argv) == 3:
-        sa = StatspackAnalyzer(sys.argv[1], sys.argv[2])
-        sa.plot()
+        aa = AWRAnalyzer(sys.argv[1], sys.argv[2])
+        aa.plot()
     else:
         print("This script by Kamil Stawiarski (@ora600pl) is to help you with visualizing data from multiple "
               "awr text reports")
