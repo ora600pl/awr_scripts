@@ -1666,12 +1666,11 @@ class AWRAnalyzer(object):
                                  "secondary event": "Other"}
 
         self.load_profile_sec = ["DB Time", "DB CPU"]
-        self.load_profile_mb = ["Redo size",
-                                "Read IO", "Write IO", "SQL Work Area"]
-        self.load_profile_blk = [
-            "Logical read", "Physical read", "Physical write", "Block changes"]
+        self.load_profile_mb = ["Redo size", "Read IO", "Write IO", "SQL Work Area"]
+        self.load_profile_blk = ["Logical read", "Physical read", "Physical write", "Block changes"]
         self.load_profile_num = ["Read IO requests", "Write IO requests", "User calls", "Parses",
                                  "Hard parses", "Logons", "Executes", "Rollbacks", "Transactions"]
+
         self.load_profile_elems = self.load_profile_sec + \
                                   self.load_profile_mb + self.load_profile_blk + self.load_profile_num
 
@@ -1748,16 +1747,16 @@ class AWRAnalyzer(object):
 
                             for class_name in self.event_classes:
                                 if snap_data[date].get(class_name, -1) == -1:
-                                    snap_data[date][class_name] = 0
+                                    snap_data[date][class_name] = 0 
 
                         elif db_version >= "11.2.0.4.0" and host_cpu_section and len(report_line_long_words) > 7 and \
                                 self.is_float(report_line_long_words[1]):
-                            snap_data_cpu[date]["Begin"] = float(report_line_long_words[3])
-                            snap_data_cpu[date]["End"] = float(report_line_long_words[4])
-                            snap_data_cpu[date]["User"] = float(report_line_long_words[5])
-                            snap_data_cpu[date]["System"] = float(report_line_long_words[6])
-                            snap_data_cpu[date]["Idle"] = float(report_line_long_words[8])
-                            snap_data_cpu[date]["WIO"] = float(report_line_long_words[7])
+                            snap_data_cpu[date]["Begin"] = float(report_line_long_words[4])
+                            snap_data_cpu[date]["End"] = float(report_line_long_words[5])
+                            snap_data_cpu[date]["User"] = float(report_line_long_words[6])
+                            snap_data_cpu[date]["System"] = float(report_line_long_words[7])
+                            snap_data_cpu[date]["Idle"] = float(report_line_long_words[9])
+                            snap_data_cpu[date]["WIO"] = float(report_line_long_words[8])
                             host_cpu_section = False
 
                         elif db_version < "11.2.0.4.0" and host_cpu_section and len(report_line_long_words) > 5 and \
@@ -1766,8 +1765,8 @@ class AWRAnalyzer(object):
                             snap_data_cpu[date]["End"] = float(report_line_long_words[2])
                             snap_data_cpu[date]["User"] = float(report_line_long_words[3])
                             snap_data_cpu[date]["System"] = float(report_line_long_words[4])
-                            snap_data_cpu[date]["Idle"] = float(report_line_long_words[5])
-                            snap_data_cpu[date]["WIO"] = float(report_line_long_words[6])
+                            snap_data_cpu[date]["Idle"] = float(report_line_long_words[6])
+                            snap_data_cpu[date]["WIO"] = float(report_line_long_words[5])
                             host_cpu_section = False
 
                         elif load_profile_section and len(report_line_long_words) > 2:
@@ -1946,7 +1945,7 @@ class AWRAnalyzer(object):
 
         # setting x/y axis above does not work, needs to be updated after fig.append_trace()
         # fig['data'][30].update(yaxis='y7')  # 'Load'
-        fig['data'][len(fig['data'])-1].update(yaxis='y7')  # 'Load'
+        # fig['data'][len(fig['data'])-1].update(yaxis='y7')  # 'Load'
 
         py.plot(fig, filename=self.name_pattern + ".html")
 
