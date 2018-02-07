@@ -1665,9 +1665,16 @@ class AWRAnalyzer(object):
                                  "enq: PB - PDB Lock": "Other",
                                  "secondary event": "Other"}
 
-        self.load_profile_elems = ["DB time(s):", "DB CPU(s):", "Redo size:", "Logical reads:", "Block changes:",
-                                   "Physical reads:", "Physical writes:", "User calls:", "Parses:", "Hard parses:",
-                                   "W/A MB processed:", "Logons:", "Executes:", "Rollbacks:", "Transactions:"]
+        self.load_profile_sec = ["DB Time", "DB CPU"]
+        self.load_profile_mb = ["Redo size",
+                                "Read IO", "Write IO", "SQL Work Area"]
+        self.load_profile_blk = [
+            "Logical read", "Physical read", "Physical write", "Block changes"]
+        self.load_profile_num = ["Read IO requests", "Write IO requests", "User calls", "Parses",
+                                 "Hard parses", "Logons", "Executes", "Rollbacks", "Transactions"]
+        self.load_profile_elems = self.load_profile_sec + \
+                                  self.load_profile_mb + self.load_profile_blk + self.load_profile_num
+
 
     def get_class_name(self, event_name_short):
         for event_name in self.event_class_name:
@@ -1699,11 +1706,14 @@ class AWRAnalyzer(object):
                 db_version = "12"
                 line_of_db_version = 6
                 line_no = 0
+                section_line = 0
+                profile_pos = 0
                 for report_line in report_file:
                     line_no += 1
                     try:
                         report_line_words = report_line.split()
                         report_line_long_words = re.split("\s{2,}", report_line)
+                        section_line += 1
 
                         if line_no == 2 and report_line.find("WARNING") >= 0:
                             line_of_db_version = 10
@@ -1760,14 +1770,20 @@ class AWRAnalyzer(object):
                             snap_data_cpu[date]["WIO"] = float(report_line_long_words[6])
                             host_cpu_section = False
 
-                        elif load_profile_section and len(report_line_long_words) > 2 and \
-                                        report_line_long_words[1] in self.load_profile_elems:
+                        elif load_profile_section and len(report_line_long_words) > 2:
+                            profile_pos += 1
+                            if profile_pos >= 2:
+                                load_elem = report_line.split(':')[0].split('(')[0].strip()
+                                load_val = report_line.split(':')[1].split()[0].replace(",", "")
+                                if load_elem in self.load_profile_elems:
+                                    if load_elem.startswith("Redo size"):
+                                        snap_data_profile[date][load_elem] = round(float(load_val) / 1024 / 1024, 2)
+                                    else:
+                                        snap_data_profile[date][load_elem] = float(load_val)
 
-                            snap_data_profile[date][report_line_long_words[1][:-1]] = \
-                                float(report_line_long_words[2].replace(",",""))
-
-                        elif report_line.startswith("Instance Efficiency Indicators"):
+                        elif report_line.startswith("Instance Efficiency"):
                             load_profile_section = False
+                            profile_pos = 0
 
                         elif len(report_line_words) > 2 \
                                 and (report_line_words[0] + " " + report_line_words[1] in self.event_classes) \
@@ -1809,55 +1825,128 @@ class AWRAnalyzer(object):
 
         data_x = sorted(snap_data.keys())
         data_y = {}
-        data_y_profile = {}
+        data_y_profile_sec = {}
+        data_y_profile_mb = {}
+        data_y_profile_blk = {}
+        data_y_profile_num = {}
         data_y_cpu = {}
 
         for i in data_x:
             for j in snap_data[i]:
-                if data_y.get(j, -1) == -1:
-                    data_y[j] = []
-                    data_y[j].append(snap_data[i][j])
-                else:
-                    data_y[j].append(snap_data[i][j])
+                data_y.setdefault(j, [])
+                data_y[j].append(snap_data[i][j])
 
             for j in snap_data_profile[i]:
-                if data_y_profile.get(j, -1) == -1:
-                    data_y_profile[j] = []
-                    data_y_profile[j].append(snap_data_profile[i][j])
-                else:
-                    data_y_profile[j].append(snap_data_profile[i][j])
+                if j in self.load_profile_sec:
+                    data_y_profile_sec.setdefault(j, [])
+                    data_y_profile_sec[j].append(snap_data_profile[i][j])
+                elif j in self.load_profile_mb:
+                    data_y_profile_mb.setdefault(j, [])
+                    data_y_profile_mb[j].append(snap_data_profile[i][j])
+                elif j in self.load_profile_blk:
+                    data_y_profile_blk.setdefault(j, [])
+                    data_y_profile_blk[j].append(snap_data_profile[i][j])
+                elif j in self.load_profile_num:
+                    data_y_profile_num.setdefault(j, [])
+                    data_y_profile_num[j].append(snap_data_profile[i][j])
 
             for j in snap_data_cpu[i]:
-                if data_y_cpu.get(j, -1) == -1:
-                    data_y_cpu[j] = []
-                    data_y_cpu[j].append(snap_data_cpu[i][j])
-                else:
-                    data_y_cpu[j].append(snap_data_cpu[i][j])
+                data_y_cpu.setdefault(j, [])
+                data_y_cpu[j].append(snap_data_cpu[i][j])
 
-        fig = tools.make_subplots(rows=3, cols=1, shared_xaxes=True, subplot_titles=("Wait Event Class & DB Time (sec)",
-                                                                  "Load Profile (Per Second)",
-                                                                  "Host CPU"))
+        fig = tools.make_subplots(
+            rows=6, cols=1, shared_xaxes=True,
+            subplot_titles=("Wait Event Class & DB Time (sec)", "Load Profile (DB/CPU)",
+                            "Load Profile (I/O R/W, Redo, SQL Workarea)",
+                            "Logical/Physical Reads/Writes, Block changes",
+                            "I/O Requests, Calls, Parses, Logons, SQL Executes, Rollbacks, Transactions",
+                            "Host CPU Average Load"))
+
+        fig['layout']['xaxis1'].update(title='Date')
+
+        fig['layout']['yaxis1'].update(title='sec')
+        fig['layout']['yaxis2'].update(title='sec/s')
+        fig['layout']['yaxis3'].update(title='MB/s')
+        fig['layout']['yaxis4'].update(title='#blks/s')
+        fig['layout']['yaxis5'].update(title='#/s')
+        fig['layout']['yaxis6'].update(title='%')
+        fig['layout'].update(yaxis7=go.YAxis(anchor='x1',
+                                             overlaying='y6',
+                                             side='right',
+                                             title='#'
+                                             ))
+
+        fig['layout'].update(title='AWR ' + data_x[0] + " - " + data_x[-1])
 
         for series in data_y:
             fig.append_trace(go.Scatter(x=data_x,
-                                         fill="tozeroy",
-                                         y=data_y[series],
-                                         name=series
-                                         ), 1, 1)
+                                        fill="tozeroy",
+                                        y=data_y[series],
+                                        name=series,
+                                        mode='lines+markers',
+                                        line=dict(shape='hv'),
+                                        # legendgroup='lg1'
+                                        ), 1, 1)
 
-        for series in data_y_profile:
+        for series in data_y_profile_sec:
             fig.append_trace(go.Scatter(x=data_x,
-                                           fill="tozeroy",
-                                           y=data_y_profile[series],
-                                           name=series
-                                           ), 2, 1)
+                                        fill="tozeroy",
+                                        y=data_y_profile_sec[series],
+                                        name=series,
+                                        mode='lines+markers',
+                                        line=dict(shape='hv'),
+                                        # xaxis='x',
+                                        # legendgroup='lg2'
+                                        ), 2, 1)
+
+        for series in data_y_profile_mb:
+            fig.append_trace(go.Scatter(x=data_x,
+                                        fill="tozeroy",
+                                        y=data_y_profile_mb[series],
+                                        name=series,
+                                        mode='lines+markers',
+                                        line=dict(shape='hv'),
+                                        # xaxis='x',
+                                        # legendgroup='lg3'
+                                        ), 3, 1)
+
+        for series in data_y_profile_blk:
+            fig.append_trace(go.Scatter(x=data_x,
+                                        fill="tozeroy",
+                                        y=data_y_profile_blk[series],
+                                        name=series,
+                                        mode='lines+markers',
+                                        line=dict(shape='hv'),
+                                        # xaxis='x',
+                                        # legendgroup='lg4'
+                                        ), 4, 1)
+
+        for series in data_y_profile_num:
+            fig.append_trace(go.Scatter(x=data_x,
+                                        fill="tozeroy",
+                                        y=data_y_profile_num[series],
+                                        name=series,
+                                        mode='lines+markers',
+                                        line=dict(shape='hv'),
+                                        # xaxis='x',
+                                        # legendgroup='lg5'
+                                        ), 5, 1)
 
         for series in data_y_cpu:
             fig.append_trace(go.Scatter(x=data_x,
-                                           fill="tozeroy",
-                                           y=data_y_cpu[series],
-                                           name=series
-                                           ), 3, 1)
+                                        fill="tozeroy",
+                                        y=data_y_cpu[series],
+                                        name=series,
+                                        mode='lines+markers',
+                                        line=dict(shape='hv'),
+                                        # xaxis='x',
+                                        # yaxis='y7' if series == 'Load' else 'y6',
+                                        # legendgroup='lg6'
+                                        ), 6, 1)
+
+        # setting x/y axis above does not work, needs to be updated after fig.append_trace()
+        # fig['data'][30].update(yaxis='y7')  # 'Load'
+        fig['data'][len(fig['data'])-1].update(yaxis='y7')  # 'Load'
 
         py.plot(fig, filename=self.name_pattern + ".html")
 
@@ -1868,7 +1957,7 @@ if __name__ == '__main__':
         aa.plot()
     else:
         print("This script by Kamil Stawiarski (@ora600pl) is to help you with visualizing data from multiple "
-              "awr text reports")
+              "awr text reports. Special thanks to Piotr Wrzosek (@pewu78) for improving the charting layout")
 
         print("Usage:")
         print("python awr_analyzer.py /path/to/reports/ pattern_to_filter_reports_by_name")
