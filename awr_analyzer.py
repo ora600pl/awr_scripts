@@ -1719,6 +1719,12 @@ class AWRAnalyzer(object):
 
                         elif line_no == line_of_db_version:
                             db_version = report_line_words[6]
+                            if db_version < "11.2.0.4.0":
+                                self.load_profile_blk = ["Logical reads", "Physical reads", "Physical writes",
+                                                         "Block changes"]
+                                self.load_profile_elems = self.load_profile_sec + self.load_profile_mb + \
+                                                          self.load_profile_blk + self.load_profile_num
+
 
                         elif report_line.find("Begin Snap:") >= 0:
                             date = report_line.split()[3] + " " + report_line.split()[4]
