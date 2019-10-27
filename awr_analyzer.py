@@ -1669,7 +1669,8 @@ class AWRAnalyzer(object):
         self.load_profile_mb = ["Redo size", "Read IO", "Write IO", "SQL Work Area"]
         self.load_profile_blk = ["Logical read", "Physical read", "Physical write", "Block changes"]
         self.load_profile_num = ["Read IO requests", "Write IO requests", "User calls", "Parses",
-                                 "Hard parses", "Logons", "Executes", "Rollbacks", "Transactions"]
+                                 "Hard parses", "Logons", "Executes", "Rollbacks", "Transactions", "Sessions (Begin)",
+                                 "Sessions (End)"]
 
         self.load_profile_elems = self.load_profile_sec + \
                                   self.load_profile_mb + self.load_profile_blk + self.load_profile_num
@@ -1733,6 +1734,10 @@ class AWRAnalyzer(object):
                             snap_data[date] = {}
                             snap_data_profile[date] = {}
                             snap_data_cpu[date] = {}
+                            snap_data_profile[date]["Sessions (Begin)"] = int(report_line_words[5])
+
+                        elif report_line.find("End Snap:") >= 0:
+                            snap_data_profile[date]["Sessions (End)"] = int(report_line_words[5])
 
                         elif report_line.find("DB Time:") >= 0:
                             snap_data[date]["DB Time"] = float(report_line_words[2].replace(",","")) * 60
@@ -1872,7 +1877,7 @@ class AWRAnalyzer(object):
             subplot_titles=("Wait Event Class & DB Time (sec)", "Load Profile (DB/CPU)",
                             "Load Profile (I/O R/W, Redo, SQL Workarea)",
                             "Logical/Physical Reads/Writes, Block changes",
-                            "I/O Requests, Calls, Parses, Logons, SQL Executes, Rollbacks, Transactions",
+                            "I/O Requests, Calls, Parses, Logons, SQL Executes, Rollbacks, Transactions, Sessions",
                             "Host CPU Average Load"))
 
         fig['layout']['xaxis1'].update(title='Date')
