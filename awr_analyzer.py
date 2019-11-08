@@ -1751,7 +1751,7 @@ class AWRAnalyzer(object):
                         elif db_version < "11.2.0.4.0" and report_line.find("Foreground Wait Events") >= 0:
                             wait_class_section = True
 
-                        elif report_line.find("Host CPU") >= 0:
+                        elif report_line.find("Host CPU") >= 0 and len(report_line) < 10:
                             host_cpu_section = True
                             if db_version >= "11.2.0.4.0":
                                 wait_class_section = False
