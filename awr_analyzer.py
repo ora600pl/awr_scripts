@@ -1760,7 +1760,7 @@ class AWRAnalyzer(object):
                                 if snap_data[date].get(class_name, -1) == -1:
                                     snap_data[date][class_name] = 0
 
-                        elif db_version >= "11.2.0.4.0" and host_cpu_section and len(report_line_long_words) > 7 and \
+                        elif db_version >= "11.2.0.4.0" and host_cpu_section and len(report_line_long_words) > 8 and \
                                 self.is_float(report_line_long_words[1]):
                             if len(report_line_long_words) == 10:
                                 snap_data_cpu[date]["Begin"] = float(report_line_long_words[4])
