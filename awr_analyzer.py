@@ -5,6 +5,7 @@ import os
 import re
 from datetime import datetime
 from plotly import tools
+from plotly.subplots import make_subplots
 
 
 class AWRAnalyzer(object):
@@ -1695,13 +1696,22 @@ class AWRAnalyzer(object):
         snap_data = {}
         snap_data_profile = {}
         snap_data_cpu = {}
+        snap_data_sql_ela = {}
+        snap_data_inst_stats = {}
+
 
         for fname in os.listdir(self.dirname):
             if fname.endswith("txt") and fname.find(self.name_pattern) >= 0:
-                report_file = open(self.dirname + "/" + fname, "r").readlines()
+                try:
+                    report_file = open(self.dirname + "/" + fname, "r").readlines()
+                except Exception as e:
+                    print(fname, str(e))
+                    raise
                 wait_class_section = False
                 load_profile_section = False
                 host_cpu_section = False
+                top_sql_ela = False
+                top_sql_ela_ignore = False
                 event_class_wait_sum = {}
                 db_version = "12"
                 line_of_db_version = 6
@@ -1726,7 +1736,6 @@ class AWRAnalyzer(object):
                                 self.load_profile_elems = self.load_profile_sec + self.load_profile_mb + \
                                                           self.load_profile_blk + self.load_profile_num
 
-
                         elif report_line.find("Begin Snap:") >= 0:
                             date = report_line.split()[3] + " " + report_line.split()[4]
                             date = datetime.strptime(date, "%d-%b-%y %H:%M:%S").strftime("%Y%m%d:%H:%M")
@@ -1734,13 +1743,76 @@ class AWRAnalyzer(object):
                             snap_data[date] = {}
                             snap_data_profile[date] = {}
                             snap_data_cpu[date] = {}
-                            snap_data_profile[date]["Sessions (Begin)"] = int(report_line_words[5])
+                            snap_data_sql_ela[date] = {}
+
+                            snap_data_inst_stats[date] = {}
+                            snap_data_inst_stats[date]["temp space allocated (bytes)"] = 0
+                            snap_data_inst_stats[date]["index fast full scans direct"] = 0
+                            snap_data_inst_stats[date]["index fast full scans (full)"] = 0
+                            snap_data_inst_stats[date]["index fetch by key"] = 0
+                            snap_data_inst_stats[date]["index scans kdiixs"] = 0
+                            snap_data_inst_stats[date]["sorts (disk)"] = 0
+                            snap_data_inst_stats[date]["table fetch by rowid"] = 0
+                            snap_data_inst_stats[date]["table scans (direct read)"] = 0
+                            snap_data_inst_stats[date]["table scans (long tables)"] = 0
+                            snap_data_inst_stats[date]["table scans (short tables)"] = 0
+                            snap_data_inst_stats[date]["queries parallelized"] = 0
+                            snap_data_inst_stats[date]["cell scans"] = 0
+
+                            snap_data_profile[date]["Sessions (Begin)"] = int(report_line_words[5].replace(",", ""))
+
+                        elif report_line.startswith("index fast full scans (direct"):
+                            snap_data_inst_stats[date]["index fast full scans direct"] = float(report_line_words[7].replace(",", ""))
+
+                        elif report_line.startswith("index fast full scans (full)"):
+                            snap_data_inst_stats[date]["index fast full scans (full)"] = float(
+                                report_line_words[6].replace(",", ""))
+
+                        elif report_line.startswith("index fetch by key"):
+                            snap_data_inst_stats[date]["index fetch by key"] = float(
+                                report_line_words[5].replace(",", ""))
+
+                        elif report_line.startswith("index scans kdiixs"):
+                            snap_data_inst_stats[date]["index scans kdiixs"] = float(
+                                report_line_words[4].replace(",", ""))
+
+                        elif report_line.startswith("sorts (disk)"):
+                            snap_data_inst_stats[date]["sorts (disk)"] = float(
+                                report_line_words[3].replace(",", ""))
+
+                        elif report_line.startswith("table fetch by rowid"):
+                            snap_data_inst_stats[date]["table fetch by rowid"] = float(
+                                report_line_words[5].replace(",", ""))
+
+                        elif report_line.startswith("table scans (direct read)"):
+                            snap_data_inst_stats[date]["table scans (direct read)"] = float(
+                                report_line_words[5].replace(",", ""))
+
+                        elif report_line.startswith("table scans (long tables)"):
+                            snap_data_inst_stats[date]["table scans (long tables)"] = float(
+                                report_line_words[5].replace(",", ""))
+
+                        elif report_line.startswith("table scans (short tables)"):
+                            snap_data_inst_stats[date]["table scans (short tables)"] = float(
+                                report_line_words[5].replace(",", ""))
+
+                        elif report_line.startswith("temp space allocated (bytes)"):
+                            snap_data_inst_stats[date]["temp space allocated (bytes)"] = float(
+                                report_line_words[5].replace(",", ""))
+
+                        elif report_line.startswith("queries parallelized"):
+                            snap_data_inst_stats[date]["queries parallelized"] = float(
+                                report_line_words[3].replace(",", ""))
+
+                        elif report_line.startswith("cell scans"):
+                            snap_data_inst_stats[date]["cell scans"] = float(
+                                report_line_words[3].replace(",", ""))
 
                         elif report_line.find("End Snap:") >= 0:
-                            snap_data_profile[date]["Sessions (End)"] = int(report_line_words[5])
+                            snap_data_profile[date]["Sessions (End)"] = int(report_line_words[5].replace(",", ""))
 
                         elif report_line.find("DB Time:") >= 0:
-                            snap_data[date]["DB Time"] = float(report_line_words[2].replace(",","")) * 60
+                            snap_data[date]["DB Time"] = float(report_line_words[2].replace(",", "")) * 60
 
                         elif report_line.startswith("Load Profile"):
                             load_profile_section = True
@@ -1832,7 +1904,23 @@ class AWRAnalyzer(object):
                             wait_class_section = False
 
                             for class_name in self.event_classes:
-                                snap_data[date][class_name] = event_class_wait_sum.get(class_name,0)
+                                snap_data[date][class_name] = event_class_wait_sum.get(class_name, 0)
+
+                        elif report_line.find("SQL ordered by Elapsed Time") >= 0 and not top_sql_ela_ignore:
+                            top_sql_ela = True
+
+                        elif top_sql_ela and len(report_line_words) == 7 and len(report_line_words[6]) == 13 \
+                                and report_line_words[6][0] != '-' and self.is_float(report_line_words[0]):
+                            snap_data_sql_ela[date][report_line_words[6]] = float(report_line_words[0].replace(",", ""))
+                            top_sql_ela = False
+                            top_sql_ela_ignore = True
+
+                        elif top_sql_ela:
+                            # print(fname, report_line_words, len(report_line_words))
+
+                            if report_line.find("SQL ordered by") >= 0 and top_sql_ela:
+                                top_sql_ela = False
+                                top_sql_ela_ignore = True
 
                     except BaseException as e:
                         print(e)
@@ -1848,6 +1936,8 @@ class AWRAnalyzer(object):
         data_y_profile_blk = {}
         data_y_profile_num = {}
         data_y_cpu = {}
+        data_y_sql_ela = {}
+        data_y_inst_stats = {}
 
         for i in data_x:
             for j in snap_data[i]:
@@ -1872,13 +1962,23 @@ class AWRAnalyzer(object):
                 data_y_cpu.setdefault(j, [])
                 data_y_cpu[j].append(snap_data_cpu[i][j])
 
-        fig = tools.make_subplots(
-            rows=6, cols=1, shared_xaxes=True,
+            for j in snap_data_sql_ela[i]:
+                data_y_sql_ela.setdefault(j, [])
+                data_y_sql_ela[j].append(snap_data_sql_ela[i][j])
+
+            for j in snap_data_inst_stats[i]:
+                data_y_inst_stats.setdefault(j, [])
+                data_y_inst_stats[j].append(snap_data_inst_stats[i][j])
+
+        fig = make_subplots(
+            rows=7, cols=1, shared_xaxes=True,
             subplot_titles=("Wait Event Class & DB Time (sec)", "Load Profile (DB/CPU)",
                             "Load Profile (I/O R/W, Redo, SQL Workarea)",
                             "Logical/Physical Reads/Writes, Block changes",
                             "I/O Requests, Calls, Parses, Logons, SQL Executes, Rollbacks, Transactions, Sessions",
-                            "Host CPU Average Load"))
+                            "Host CPU Average Load"
+                            , "Instance stats / s"
+                            ))
 
         fig['layout']['xaxis1'].update(title='Date')
 
@@ -1888,11 +1988,7 @@ class AWRAnalyzer(object):
         fig['layout']['yaxis4'].update(title='#blks/s')
         fig['layout']['yaxis5'].update(title='#/s')
         fig['layout']['yaxis6'].update(title='%')
-        fig['layout'].update(yaxis7=go.YAxis(anchor='x1',
-                                             overlaying='y6',
-                                             side='right',
-                                             title='#'
-                                             ))
+        fig['layout']['yaxis7'].update(title='#/s')
 
         fig['layout'].update(title='AWR ' + data_x[0] + " - " + data_x[-1])
 
@@ -1946,8 +2042,6 @@ class AWRAnalyzer(object):
                                         name=series,
                                         mode='lines+markers',
                                         line=dict(shape='hv'),
-                                        # xaxis='x',
-                                        # legendgroup='lg5'
                                         ), 5, 1)
 
         for series in data_y_cpu:
@@ -1962,9 +2056,24 @@ class AWRAnalyzer(object):
                                         # legendgroup='lg6'
                                         ), 6, 1)
 
-        # setting x/y axis above does not work, needs to be updated after fig.append_trace()
-        # fig['data'][30].update(yaxis='y7')  # 'Load'
-        # fig['data'][len(fig['data'])-1].update(yaxis='y7')  # 'Load'
+        for series in data_y_inst_stats:
+            fig.append_trace(go.Scatter(x=data_x,
+                                        fill="tozeroy",
+                                        y=data_y_inst_stats[series],
+                                        name=series,
+                                        mode='lines+markers',
+                                        line=dict(shape='hv'),
+                                        ), 7, 1)
+
+        # for series in data_y_sql_ela:
+        #     fig.append_trace(go.Scatter(x=data_x,
+        #                                 fill="tozeroy",
+        #                                 y=data_y_sql_ela[series],
+        #                                 name=series,
+        #                                 mode='lines+markers',
+        #                                 line=dict(shape='hv'),
+        #                                 ), 7, 1)
+
 
         py.plot(fig, filename=self.name_pattern + ".html")
 
