@@ -1994,23 +1994,24 @@ class AWRAnalyzer(object):
 
             fig = make_subplots(rows=9, cols=1, shared_xaxes=True, subplot_titles=("Wait Event Class & DB Time (sec)",
                                                                                    "Load Profile (DB/CPU)",
-                                                "Load Profile (I/O R/W, Redo, SQL Workarea)",
-                                                "Logical/Physical Reads/Writes, Block changes",
+                                                                                   "TOP SQL by Elapsed time",
+                                                                                   "Time Model",
                                                 "I/O Requests, Calls, Parses, Logons, SQL Executes, Rollbacks, Transactions, Sessions",
                                                 "Host CPU Average Load",
                                                 "Instance stats / s",
-                                                "Time Model", "TOP SQL by Elapsed time"
+                                                "Load Profile (I/O R/W, Redo, SQL Workarea)",
+                                                "Logical/Physical Reads/Writes, Block changes"
                                                 ))
 
             fig['layout']['yaxis1'].update(title='sec')
             fig['layout']['yaxis2'].update(title='sec/s')
-            fig['layout']['yaxis3'].update(title='MB/s')
-            fig['layout']['yaxis4'].update(title='#blks/s')
+            fig['layout']['yaxis3'].update(title='sec')
+            fig['layout']['yaxis4'].update(title='sec')
             fig['layout']['yaxis5'].update(title='#/s')
             fig['layout']['yaxis6'].update(title='%')
             fig['layout']['yaxis7'].update(title='#/s')
-            fig['layout']['yaxis8'].update(title='sec')
-            fig['layout']['yaxis9'].update(title='sec')
+            fig['layout']['yaxis8'].update(title='MB/s')
+            fig['layout']['yaxis9'].update(title='#blk/s')
 
             fig['layout'].update(title='AWR ' + data_x[0] + " - " + data_x[-1])
 
@@ -2031,20 +2032,20 @@ class AWRAnalyzer(object):
                                             mode='lines+markers',
                                             line=dict(shape='hv'),
                                             ), 2, 1)
-
-            for series in data_y_profile_mb:
-                fig.append_trace(go.Scatter(x=data_x,
-                                            fill="tozeroy",
-                                            y=data_y_profile_mb[series],
+            for series in data_y_sql_ela:
+                fig.add_trace(go.Scatter(x=data_x,
+                                            #fill="tozeroy",
+                                            y=data_y_sql_ela[series],
                                             name=series,
                                             mode='lines+markers',
                                             line=dict(shape='hv'),
+                                            #visible="legendonly",
                                             ), 3, 1)
 
-            for series in data_y_profile_blk:
+            for series in data_y_time_model:
                 fig.append_trace(go.Scatter(x=data_x,
                                             fill="tozeroy",
-                                            y=data_y_profile_blk[series],
+                                            y=data_y_time_model[series],
                                             name=series,
                                             mode='lines+markers',
                                             line=dict(shape='hv'),
@@ -2077,25 +2078,28 @@ class AWRAnalyzer(object):
                                             line=dict(shape='hv'),
                                             ), 7, 1)
 
-            for series in data_y_time_model:
+            for series in data_y_profile_mb:
                 fig.append_trace(go.Scatter(x=data_x,
                                             fill="tozeroy",
-                                            y=data_y_time_model[series],
+                                            y=data_y_profile_mb[series],
                                             name=series,
                                             mode='lines+markers',
                                             line=dict(shape='hv'),
                                             ), 8, 1)
-            for series in data_y_sql_ela:
-                fig.add_trace(go.Scatter(x=data_x,
-                                            #fill="tozeroy",
-                                            y=data_y_sql_ela[series],
+
+            for series in data_y_profile_blk:
+                fig.append_trace(go.Scatter(x=data_x,
+                                            fill="tozeroy",
+                                            y=data_y_profile_blk[series],
                                             name=series,
                                             mode='lines+markers',
                                             line=dict(shape='hv'),
-                                            #visible="legendonly",
                                             ), 9, 1)
 
-            fig.update_xaxes(showticklabels=False)
+
+
+            #fig.update_xaxes(showticklabels=False)
+            fig.update_layout(height=2000)
 
         else:
             fig = make_subplots(rows=3, cols=1, shared_xaxes=True, subplot_titles=("Wait Event Class & DB Time (sec)",
