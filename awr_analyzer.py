@@ -9,10 +9,10 @@ from collections import OrderedDict
 
 
 class AWRAnalyzer(object):
-    def __init__(self, dirname, name_pattern, display_sql_section=False):
+    def __init__(self, dirname, name_pattern, param='FULL'):
         self.dirname = dirname
         self.name_pattern = name_pattern
-        self.display_sql_section = display_sql_section
+        self.param = param
         self.event_classes = ["System I/O", "Other", "User I/O", "Configuration", "Cluster", "Concurrency",
                               "Administrative", "Application", "Network", "Commit"]
 
@@ -1990,7 +1990,7 @@ class AWRAnalyzer(object):
                 data_y_time_model.setdefault(j, [])
                 data_y_time_model[j].append(snap_data_time_model[i][j])
 
-        if not self.display_sql_section:
+        if self.param == 'FULL':
 
             fig = make_subplots(rows=9, cols=1, shared_xaxes=True, subplot_titles=("Wait Event Class & DB Time (sec)",
                                                                                    "Load Profile (DB/CPU)",
@@ -2067,6 +2067,7 @@ class AWRAnalyzer(object):
                                             name=series,
                                             mode='lines+markers',
                                             line=dict(shape='hv'),
+                                            stackgroup='cpu',
                                             ), 6, 1)
 
             for series in data_y_inst_stats:
@@ -2099,9 +2100,9 @@ class AWRAnalyzer(object):
 
 
             #fig.update_xaxes(showticklabels=False)
-            fig.update_layout(height=2000)
+            fig.update_layout(height=1500)
 
-        else:
+        elif self.param == 'SQL':
             fig = make_subplots(rows=3, cols=1, shared_xaxes=True, subplot_titles=("Wait Event Class & DB Time (sec)",
                                                                                    "Load Profile (DB/CPU)",
                                                                                    "TOP SQL Ela (sec)"
@@ -2141,6 +2142,96 @@ class AWRAnalyzer(object):
                                             #visible="legendonly",
                                             ), 3, 1)
 
+        elif self.param == 'IO':
+
+            fig = make_subplots(rows=7, cols=1, shared_xaxes=True, subplot_titles=("Wait Event Class & DB Time (sec)",
+                                                                                   "Load Profile (DB/CPU)",
+                                                "I/O Requests, Calls, Parses, Logons, SQL Executes, Rollbacks, Transactions, Sessions",
+                                                "Host CPU Average Load",
+                                                "Instance stats / s",
+                                                "Load Profile (I/O R/W, Redo, SQL Workarea)",
+                                                "Logical/Physical Reads/Writes, Block changes"
+                                                ))
+
+            fig['layout']['yaxis1'].update(title='sec')
+            fig['layout']['yaxis2'].update(title='sec/s')
+            fig['layout']['yaxis3'].update(title='#/s')
+            fig['layout']['yaxis4'].update(title='%')
+            fig['layout']['yaxis5'].update(title='#/s')
+            fig['layout']['yaxis6'].update(title='MB/s')
+            fig['layout']['yaxis7'].update(title='#blk/s')
+
+            fig['layout'].update(title='AWR ' + data_x[0] + " - " + data_x[-1])
+
+            for series in data_y:
+                fig.append_trace(go.Scatter(x=data_x,
+                                            fill="tozeroy",
+                                            y=data_y[series],
+                                            name=series,
+                                            mode='lines+markers',
+                                            line=dict(shape='hv'),
+                                            ), 1, 1)
+
+            for series in data_y_profile_sec:
+                fig.append_trace(go.Scatter(x=data_x,
+                                            fill="tozeroy",
+                                            y=data_y_profile_sec[series],
+                                            name=series,
+                                            mode='lines+markers',
+                                            line=dict(shape='hv'),
+                                            ), 2, 1)
+
+            for series in data_y_profile_num:
+                fig.append_trace(go.Scatter(x=data_x,
+                                            fill="tozeroy",
+                                            y=data_y_profile_num[series],
+                                            name=series,
+                                            mode='lines+markers',
+                                            line=dict(shape='hv'),
+                                            ), 3, 1)
+
+            for series in data_y_cpu:
+                fig.append_trace(go.Scatter(x=data_x,
+                                            fill="tozeroy",
+                                            y=data_y_cpu[series],
+                                            name=series,
+                                            mode='lines+markers',
+                                            line=dict(shape='hv'),
+                                            stackgroup='cpu',
+                                            ), 4, 1)
+
+            for series in data_y_inst_stats:
+                fig.append_trace(go.Scatter(x=data_x,
+                                            fill="tozeroy",
+                                            y=data_y_inst_stats[series],
+                                            name=series,
+                                            mode='lines+markers',
+                                            line=dict(shape='hv'),
+                                            ), 5, 1)
+
+            for series in data_y_profile_mb:
+                fig.append_trace(go.Scatter(x=data_x,
+                                            fill="tozeroy",
+                                            y=data_y_profile_mb[series],
+                                            name=series,
+                                            mode='lines+markers',
+                                            line=dict(shape='hv'),
+                                            ), 6, 1)
+
+            for series in data_y_profile_blk:
+                fig.append_trace(go.Scatter(x=data_x,
+                                            fill="tozeroy",
+                                            y=data_y_profile_blk[series],
+                                            name=series,
+                                            mode='lines+markers',
+                                            line=dict(shape='hv'),
+                                            ), 7, 1)
+
+
+
+            #fig.update_xaxes(showticklabels=False)
+            #fig.update_layout(height=1500)
+
 
 
         py.plot(fig, filename=self.name_pattern + ".html")
@@ -2150,8 +2241,8 @@ if __name__ == '__main__':
     if len(sys.argv) == 3:
         aa = AWRAnalyzer(sys.argv[1], sys.argv[2])
         aa.plot()
-    elif len(sys.argv) == 4 and sys.argv[3] == 'SQL':
-        aa = AWRAnalyzer(sys.argv[1], sys.argv[2], True)
+    elif len(sys.argv) == 4 and (sys.argv[3] == 'SQL' or sys.argv[3] == 'IO'):
+        aa = AWRAnalyzer(sys.argv[1], sys.argv[2], sys.argv[3])
         aa.plot()
 
     else:
