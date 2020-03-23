@@ -9,10 +9,12 @@ from collections import OrderedDict
 
 
 class AWRAnalyzer(object):
-    def __init__(self, dirname, name_pattern, param='FULL'):
+    def __init__(self, dirname, name_pattern, param='FULL', scale=False):
         self.dirname = dirname
         self.name_pattern = name_pattern
         self.param = param
+        self.scale = scale
+        self.cpu_count = 0
         self.event_classes = ["System I/O", "Other", "User I/O", "Configuration", "Cluster", "Concurrency",
                               "Administrative", "Application", "Network", "Commit"]
 
@@ -1701,6 +1703,7 @@ class AWRAnalyzer(object):
         snap_data_inst_stats = {}
         snap_data_time_model = {}
         sql_ids = {}
+        snap_data_io_avg = {}
 
 
         for fname in os.listdir(self.dirname):
@@ -1750,6 +1753,7 @@ class AWRAnalyzer(object):
                             snap_data_profile[date] = {}
                             snap_data_cpu[date] = {}
                             snap_data_sql_ela[date] = {}
+                            snap_data_io_avg[date] = {}
 
                             snap_data_inst_stats[date] = {}
                             snap_data_inst_stats[date]["temp space allocated (bytes)"] = 0
@@ -1838,6 +1842,7 @@ class AWRAnalyzer(object):
                                 snap_data_cpu[date]["System"] = float(report_line_long_words[7])
                                 # snap_data_cpu[date]["Idle"] = float(report_line_long_words[9])
                                 snap_data_cpu[date]["WIO"] = float(report_line_long_words[8])
+                                self.cpu_count = report_line_long_words[1]
                             else:
                                 # snap_data_cpu[date]["Begin"] = float(report_line_long_words[3])
                                 # snap_data_cpu[date]["End"] = float(report_line_long_words[4])
@@ -1845,6 +1850,7 @@ class AWRAnalyzer(object):
                                 snap_data_cpu[date]["System"] = float(report_line_long_words[6])
                                 # snap_data_cpu[date]["Idle"] = float(report_line_long_words[8])
                                 snap_data_cpu[date]["WIO"] = float(report_line_long_words[7])
+                                self.cpu_count = report_line_long_words[1]
                             host_cpu_section = False
 
                         elif db_version < "11.2.0.4.0" and host_cpu_section and len(report_line_long_words) > 5 and \
@@ -1855,6 +1861,7 @@ class AWRAnalyzer(object):
                             snap_data_cpu[date]["System"] = float(report_line_long_words[4])
                             # snap_data_cpu[date]["Idle"] = float(report_line_long_words[6])
                             snap_data_cpu[date]["WIO"] = float(report_line_long_words[5])
+                            self.cpu_count = report_line_long_words[1]
                             host_cpu_section = False
 
                         elif load_profile_section and len(report_line_long_words) > 2:
@@ -1872,13 +1879,24 @@ class AWRAnalyzer(object):
                             load_profile_section = False
                             profile_pos = 0
 
-                        elif len(report_line_words) > 2 \
+                        elif db_version >= "11.2.0.4.0" and len(report_line_words) > 2 \
                                 and (report_line_words[0] + " " + report_line_words[1] in self.event_classes) \
                                 and wait_class_section \
                                 and report_line.startswith(report_line_words[0]):
 
                             snap_data[date][report_line_words[0] + " " + report_line_words[1]] = \
                                 float(report_line_words[3].replace(",", ""))
+
+                            if report_line.startswith("User I/O"):
+                                avg_value = 0
+                                if report_line_words[4].find("ms") > 0:
+                                    avg_value = float(report_line_words[4].replace(",", "").strip("ms"))
+                                elif report_line_words[4].find("us") > 0:
+                                    avg_value = float(report_line_words[4].replace(",", "").strip("us")) / 1000
+                                else:
+                                    avg_value = float(report_line_words[4].replace(",", ""))
+
+                                snap_data_io_avg[date]["User I/O (avg ms)"] = avg_value
 
                         elif db_version >= "11.2.0.4.0" and len(report_line_words) > 2 \
                              and (report_line_words[0] in self.event_classes) \
@@ -1937,6 +1955,7 @@ class AWRAnalyzer(object):
         data_y_sql_ela = {}
         data_y_inst_stats = {}
         data_y_time_model = {}
+        data_y_io_avg = {}
 
         sql_ela_ns = []
         for sqlid in sql_ids:
@@ -1956,10 +1975,6 @@ class AWRAnalyzer(object):
                     del snap_data_sql_ela[i][sqlid]
 
         for i in data_x:
-            for j in snap_data[i]:
-                data_y.setdefault(j, [])
-                data_y[j].append(snap_data[i][j])
-
             for j in snap_data_profile[i]:
                 if j in self.load_profile_sec:
                     data_y_profile_sec.setdefault(j, [])
@@ -1973,6 +1988,10 @@ class AWRAnalyzer(object):
                 elif j in self.load_profile_num:
                     data_y_profile_num.setdefault(j, [])
                     data_y_profile_num[j].append(snap_data_profile[i][j])
+
+            for j in snap_data[i]:
+                data_y.setdefault(j, [])
+                data_y[j].append(snap_data[i][j])
 
             for j in snap_data_cpu[i]:
                 data_y_cpu.setdefault(j, [])
@@ -1990,9 +2009,19 @@ class AWRAnalyzer(object):
                 data_y_time_model.setdefault(j, [])
                 data_y_time_model[j].append(snap_data_time_model[i][j])
 
+            for j in snap_data_io_avg[i]:
+                data_y_io_avg.setdefault(j, [])
+                data_y_io_avg[j].append(snap_data_io_avg[i][j])
+
+        if self.scale:
+            for series in data_y:
+                for x in range(len(data_y[series])):
+                    # print(series, x, round(data_y[series][x],2), data_y_profile_sec["DB Time"][x])
+                    data_y[series][x] = data_y[series][x] / data_y_profile_sec["DB Time"][x]
+
         if self.param == 'FULL':
 
-            fig = make_subplots(rows=9, cols=1, shared_xaxes=True, subplot_titles=("Wait Event Class & DB Time (sec)",
+            fig = make_subplots(rows=10, cols=1, shared_xaxes=True, subplot_titles=("Wait Event Class & DB Time (sec)",
                                                                                    "Load Profile (DB/CPU)",
                                                                                    "TOP SQL by Elapsed time",
                                                                                    "Time Model",
@@ -2000,7 +2029,8 @@ class AWRAnalyzer(object):
                                                 "Host CPU Average Load",
                                                 "Instance stats / s",
                                                 "Load Profile (I/O R/W, Redo, SQL Workarea)",
-                                                "Logical/Physical Reads/Writes, Block changes"
+                                                "Logical/Physical Reads/Writes, Block changes",
+                                                "AVG User I/O (ms)"
                                                 ))
 
             fig['layout']['yaxis1'].update(title='sec')
@@ -2012,8 +2042,9 @@ class AWRAnalyzer(object):
             fig['layout']['yaxis7'].update(title='#/s')
             fig['layout']['yaxis8'].update(title='MB/s')
             fig['layout']['yaxis9'].update(title='#blk/s')
+            fig['layout']['yaxis10'].update(title='AVG ms / snap')
 
-            fig['layout'].update(title='AWR ' + data_x[0] + " - " + data_x[-1])
+            fig['layout'].update(title='AWR ' + data_x[0] + " - " + data_x[-1] + " CPUs: " + str(self.cpu_count))
 
             for series in data_y:
                 fig.append_trace(go.Scatter(x=data_x,
@@ -2022,6 +2053,7 @@ class AWRAnalyzer(object):
                                             name=series,
                                             mode='lines+markers',
                                             line=dict(shape='hv'),
+                                            #stackgroup='waits',
                                             ), 1, 1)
 
             for series in data_y_profile_sec:
@@ -2097,6 +2129,15 @@ class AWRAnalyzer(object):
                                             line=dict(shape='hv'),
                                             ), 9, 1)
 
+            for series in data_y_io_avg:
+                fig.append_trace(go.Scatter(x=data_x,
+                                            #fill="tozeroy",
+                                            y=data_y_io_avg[series],
+                                            name=series,
+                                            mode='lines+markers',
+                                            line=dict(shape='hv'),
+                                            ), 10, 1)
+
 
 
             #fig.update_xaxes(showticklabels=False)
@@ -2112,7 +2153,7 @@ class AWRAnalyzer(object):
             fig['layout']['yaxis2'].update(title='sec/s')
             fig['layout']['yaxis3'].update(title='sec')
 
-            fig['layout'].update(title='AWR ' + data_x[0] + " - " + data_x[-1])
+            fig['layout'].update(title='AWR ' + data_x[0] + " - " + data_x[-1] + " CPUs: " + str(self.cpu_count))
 
             for series in data_y:
                 fig.append_trace(go.Scatter(x=data_x,
@@ -2121,6 +2162,7 @@ class AWRAnalyzer(object):
                                             name=series,
                                             mode='lines+markers',
                                             line=dict(shape='hv'),
+                                            #stackgroup='waits',
                                             ), 1, 1)
 
             for series in data_y_profile_sec:
@@ -2144,8 +2186,9 @@ class AWRAnalyzer(object):
 
         elif self.param == 'IO':
 
-            fig = make_subplots(rows=7, cols=1, shared_xaxes=True, subplot_titles=("Wait Event Class & DB Time (sec)",
+            fig = make_subplots(rows=8, cols=1, shared_xaxes=True, subplot_titles=("Wait Event Class & DB Time (sec)",
                                                                                    "Load Profile (DB/CPU)",
+                                                                                   "AVG User I/O (ms)",
                                                 "I/O Requests, Calls, Parses, Logons, SQL Executes, Rollbacks, Transactions, Sessions",
                                                 "Host CPU Average Load",
                                                 "Instance stats / s",
@@ -2155,13 +2198,14 @@ class AWRAnalyzer(object):
 
             fig['layout']['yaxis1'].update(title='sec')
             fig['layout']['yaxis2'].update(title='sec/s')
-            fig['layout']['yaxis3'].update(title='#/s')
-            fig['layout']['yaxis4'].update(title='%')
-            fig['layout']['yaxis5'].update(title='#/s')
-            fig['layout']['yaxis6'].update(title='MB/s')
-            fig['layout']['yaxis7'].update(title='#blk/s')
+            fig['layout']['yaxis3'].update(title='AVG ms / snap')
+            fig['layout']['yaxis4'].update(title='#/s')
+            fig['layout']['yaxis5'].update(title='%')
+            fig['layout']['yaxis6'].update(title='#/s')
+            fig['layout']['yaxis7'].update(title='MB/s')
+            fig['layout']['yaxis8'].update(title='#blk/s')
 
-            fig['layout'].update(title='AWR ' + data_x[0] + " - " + data_x[-1])
+            fig['layout'].update(title='AWR ' + data_x[0] + " - " + data_x[-1] + " CPUs: " + str(self.cpu_count))
 
             for series in data_y:
                 fig.append_trace(go.Scatter(x=data_x,
@@ -2170,6 +2214,7 @@ class AWRAnalyzer(object):
                                             name=series,
                                             mode='lines+markers',
                                             line=dict(shape='hv'),
+                                            #stackgroup='waits',
                                             ), 1, 1)
 
             for series in data_y_profile_sec:
@@ -2181,6 +2226,15 @@ class AWRAnalyzer(object):
                                             line=dict(shape='hv'),
                                             ), 2, 1)
 
+            for series in data_y_io_avg:
+                fig.append_trace(go.Scatter(x=data_x,
+                                            #fill="tozeroy",
+                                            y=data_y_io_avg[series],
+                                            name=series,
+                                            mode='lines+markers',
+                                            line=dict(shape='hv'),
+                                            ), 3, 1)
+
             for series in data_y_profile_num:
                 fig.append_trace(go.Scatter(x=data_x,
                                             fill="tozeroy",
@@ -2188,7 +2242,7 @@ class AWRAnalyzer(object):
                                             name=series,
                                             mode='lines+markers',
                                             line=dict(shape='hv'),
-                                            ), 3, 1)
+                                            ), 4, 1)
 
             for series in data_y_cpu:
                 fig.append_trace(go.Scatter(x=data_x,
@@ -2198,7 +2252,7 @@ class AWRAnalyzer(object):
                                             mode='lines+markers',
                                             line=dict(shape='hv'),
                                             stackgroup='cpu',
-                                            ), 4, 1)
+                                            ), 5, 1)
 
             for series in data_y_inst_stats:
                 fig.append_trace(go.Scatter(x=data_x,
@@ -2207,7 +2261,7 @@ class AWRAnalyzer(object):
                                             name=series,
                                             mode='lines+markers',
                                             line=dict(shape='hv'),
-                                            ), 5, 1)
+                                            ), 6, 1)
 
             for series in data_y_profile_mb:
                 fig.append_trace(go.Scatter(x=data_x,
@@ -2216,7 +2270,7 @@ class AWRAnalyzer(object):
                                             name=series,
                                             mode='lines+markers',
                                             line=dict(shape='hv'),
-                                            ), 6, 1)
+                                            ), 7, 1)
 
             for series in data_y_profile_blk:
                 fig.append_trace(go.Scatter(x=data_x,
@@ -2225,7 +2279,7 @@ class AWRAnalyzer(object):
                                             name=series,
                                             mode='lines+markers',
                                             line=dict(shape='hv'),
-                                            ), 7, 1)
+                                            ), 8, 1)
 
 
 
@@ -2243,6 +2297,10 @@ if __name__ == '__main__':
         aa.plot()
     elif len(sys.argv) == 4 and (sys.argv[3] == 'SQL' or sys.argv[3] == 'IO'):
         aa = AWRAnalyzer(sys.argv[1], sys.argv[2], sys.argv[3])
+        aa.plot()
+
+    elif len(sys.argv) == 5 and (sys.argv[3] == 'SQL' or sys.argv[3] == 'IO') and sys.argv[4] == 'scale':
+        aa = AWRAnalyzer(sys.argv[1], sys.argv[2], sys.argv[3], True)
         aa.plot()
 
     else:
