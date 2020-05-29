@@ -1785,13 +1785,13 @@ class AWRAnalyzer(object):
 
                             snap_data_profile[date]["Sessions (Begin)"] = int(report_line_words[5].replace(",", ""))
 
-                        elif not time_model_section and report_line.startswith("Time Model"):
+                        elif not time_model_section and (report_line.startswith("Time Model") or report_line[1:].startswith("Time Model")):
                             time_model_section = True
 
-                        elif not instance_stats_section and report_line.startswith("Instance Activity Stats"):
+                        elif not instance_stats_section and (report_line.startswith("Instance Activity Stats") or report_line[1:].startswith("Instance Activity Stats")):
                             instance_stats_section = True
 
-                        elif time_model_section and report_line.startswith("Foreground Wait Events"):
+                        elif time_model_section and (report_line.startswith("Foreground Wait Events") or report_line[1:].startswith("Foreground Wait Events")):
                             time_model_section = False
 
                         elif instance_stats_section and (report_line.startswith("IOStat") or report_line.startswith("IO Stat")):
@@ -1828,6 +1828,8 @@ class AWRAnalyzer(object):
                             host_cpu_section = True
                             if db_version >= "11.2.0.4.0":
                                 wait_class_section = False
+                            else:
+                                self.cpu_count = report_line_words[3]
 
                             for class_name in self.event_classes:
                                 if snap_data[date].get(class_name, -1) == -1:
@@ -1850,7 +1852,7 @@ class AWRAnalyzer(object):
                                 snap_data_cpu[date]["System"] = float(report_line_long_words[6])
                                 # snap_data_cpu[date]["Idle"] = float(report_line_long_words[8])
                                 snap_data_cpu[date]["WIO"] = float(report_line_long_words[7])
-                                self.cpu_count = report_line_long_words[1]
+
                             host_cpu_section = False
 
                         elif db_version < "11.2.0.4.0" and host_cpu_section and len(report_line_long_words) > 5 and \
@@ -1861,7 +1863,7 @@ class AWRAnalyzer(object):
                             snap_data_cpu[date]["System"] = float(report_line_long_words[4])
                             # snap_data_cpu[date]["Idle"] = float(report_line_long_words[6])
                             snap_data_cpu[date]["WIO"] = float(report_line_long_words[5])
-                            self.cpu_count = report_line_long_words[1]
+
                             host_cpu_section = False
 
                         elif load_profile_section and len(report_line_long_words) > 2:
