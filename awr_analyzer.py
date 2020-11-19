@@ -5,7 +5,6 @@ import os
 import re
 from datetime import datetime
 from plotly.subplots import make_subplots
-from collections import OrderedDict
 
 
 class AWRAnalyzer(object):
@@ -1683,6 +1682,8 @@ class AWRAnalyzer(object):
     def get_class_name(self, event_name_short):
         for event_name in self.event_class_name:
             if event_name.startswith(event_name_short):
+                # if event_name_short == "db flash cache single bloc":
+                #     print(event_name, self.event_class_name[event_name])
                 return self.event_class_name[event_name]
 
         return "NONE"
@@ -1793,6 +1794,7 @@ class AWRAnalyzer(object):
 
                         elif time_model_section and (report_line.startswith("Foreground Wait Events") or report_line[1:].startswith("Foreground Wait Events")):
                             time_model_section = False
+                            wait_class_section = True
 
                         elif instance_stats_section and (report_line.startswith("IOStat") or report_line.startswith("IO Stat")):
                             instance_stats_section = False
@@ -1812,9 +1814,6 @@ class AWRAnalyzer(object):
                         elif report_line.find("End Snap:") >= 0:
                             snap_data_profile[date]["Sessions (End)"] = int(report_line_words[5].replace(",", ""))
 
-                        # elif report_line.find("DB Time:") >= 0:
-                        #     snap_data[date]["DB Time"] = float(report_line_words[2].replace(",", "")) * 60
-
                         elif report_line.startswith("Load Profile"):
                             load_profile_section = True
 
@@ -1824,7 +1823,7 @@ class AWRAnalyzer(object):
                         elif db_version < "11.2.0.4.0" and report_line.find("Foreground Wait Events") >= 0:
                             wait_class_section = True
 
-                        elif report_line.find("Host CPU") >= 0: #and len(report_line) < 10:
+                        elif report_line.find("Host CPU") >= 0:
                             host_cpu_section = True
                             if db_version >= "11.2.0.4.0":
                                 wait_class_section = False
@@ -1838,30 +1837,21 @@ class AWRAnalyzer(object):
                         elif db_version >= "11.2.0.4.0" and host_cpu_section and len(report_line_long_words) > 8 and \
                                 self.is_float(report_line_long_words[1]):
                             if len(report_line_long_words) == 10:
-                                # snap_data_cpu[date]["Begin"] = float(report_line_long_words[4])
-                                # snap_data_cpu[date]["End"] = float(report_line_long_words[5])
                                 snap_data_cpu[date]["User"] = float(report_line_long_words[6])
                                 snap_data_cpu[date]["System"] = float(report_line_long_words[7])
-                                # snap_data_cpu[date]["Idle"] = float(report_line_long_words[9])
                                 snap_data_cpu[date]["WIO"] = float(report_line_long_words[8])
                                 self.cpu_count = report_line_long_words[1]
                             else:
-                                # snap_data_cpu[date]["Begin"] = float(report_line_long_words[3])
-                                # snap_data_cpu[date]["End"] = float(report_line_long_words[4])
                                 snap_data_cpu[date]["User"] = float(report_line_long_words[5])
                                 snap_data_cpu[date]["System"] = float(report_line_long_words[6])
-                                # snap_data_cpu[date]["Idle"] = float(report_line_long_words[8])
                                 snap_data_cpu[date]["WIO"] = float(report_line_long_words[7])
 
                             host_cpu_section = False
 
                         elif db_version < "11.2.0.4.0" and host_cpu_section and len(report_line_long_words) > 5 and \
                                 self.is_float(report_line_long_words[1]):
-                            # snap_data_cpu[date]["Begin"] = float(report_line_long_words[1])
-                            # snap_data_cpu[date]["End"] = float(report_line_long_words[2])
                             snap_data_cpu[date]["User"] = float(report_line_long_words[3])
                             snap_data_cpu[date]["System"] = float(report_line_long_words[4])
-                            # snap_data_cpu[date]["Idle"] = float(report_line_long_words[6])
                             snap_data_cpu[date]["WIO"] = float(report_line_long_words[5])
 
                             host_cpu_section = False
@@ -1910,6 +1900,7 @@ class AWRAnalyzer(object):
                         elif db_version < "11.2.0.4.0" and wait_class_section and len(report_line_long_words) >= 5 \
                                 and self.is_float(report_line_long_words[3]):
                             class_name = self.get_class_name(report_line_long_words[0])
+
                             if class_name not in ("NONE", "Other", "Idle"):
                                 if event_class_wait_sum.get(class_name, -1) >= 0:
                                     event_class_wait_sum[class_name] += float(report_line_long_words[3].replace("," ,""))
@@ -1965,6 +1956,7 @@ class AWRAnalyzer(object):
 
         sql_ela_s = sorted(sql_ela_ns)
         sql_ela_top = sql_ela_s[-20:]
+        # sql_ela_top = sql_ela_s
         sql_ela_top_dict = {}
         for se in sql_ela_top:
             sql_ela_top_dict[se[1]] = se[0]
@@ -2146,9 +2138,10 @@ class AWRAnalyzer(object):
             fig.update_layout(height=1500)
 
         elif self.param == 'SQL':
-            fig = make_subplots(rows=3, cols=1, shared_xaxes=True, subplot_titles=("Wait Event Class & DB Time (sec)",
+            fig = make_subplots(rows=4, cols=1, shared_xaxes=True, subplot_titles=("Wait Event Class & DB Time (sec)",
                                                                                    "Load Profile (DB/CPU)",
                                                                                    "TOP SQL Ela (sec)"
+                                                                                   "SQL box plots"
                                                                                    ))
 
             fig['layout']['yaxis1'].update(title='sec')
@@ -2185,6 +2178,7 @@ class AWRAnalyzer(object):
                                             line=dict(shape='hv'),
                                             #visible="legendonly",
                                             ), 3, 1)
+
 
         elif self.param == 'IO':
 
@@ -2314,3 +2308,4 @@ if __name__ == '__main__':
         print("You have to install plotly first [pip install plotly]\n")
         print("Details can be found on this blog: blog.ora-600.pl "
               "and GitHub: https://github.com/ora600pl/statspack_scripts")
+
