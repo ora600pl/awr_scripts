@@ -2337,5 +2337,4 @@ if __name__ == '__main__':
         print("Details can be found on this blog: blog.ora-600.pl "
               "and GitHub: https://github.com/ora600pl/statspack_scripts")
 
-        aa = AWRAnalyzer("/Users/inter/Dropbox/ORA-600/Firmy/CANALPLUS/auditfiles/awry/NOV", "awrrpt_1")
         aa.plot()
