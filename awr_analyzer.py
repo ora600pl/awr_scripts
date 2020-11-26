@@ -2336,5 +2336,4 @@ if __name__ == '__main__':
         print("You have to install plotly first [pip install plotly]\n")
         print("Details can be found on this blog: blog.ora-600.pl "
               "and GitHub: https://github.com/ora600pl/statspack_scripts")
-
         aa.plot()
