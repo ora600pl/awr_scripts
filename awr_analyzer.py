@@ -1703,6 +1703,7 @@ class AWRAnalyzer(object):
         snap_data_sql_ela = {}
         snap_data_inst_stats = {}
         snap_data_time_model = {}
+        snap_data_event_ela = {}
         sql_ids = {}
         snap_data_io_avg = {}
 
@@ -1754,6 +1755,7 @@ class AWRAnalyzer(object):
                             snap_data_profile[date] = {}
                             snap_data_cpu[date] = {}
                             snap_data_sql_ela[date] = {}
+                            snap_data_event_ela[date] = {}
                             snap_data_io_avg[date] = {}
 
                             snap_data_inst_stats[date] = {}
@@ -1769,6 +1771,9 @@ class AWRAnalyzer(object):
                             snap_data_inst_stats[date]["table scans (short tables)"] = 0
                             snap_data_inst_stats[date]["queries parallelized"] = 0
                             snap_data_inst_stats[date]["cell scans"] = 0
+                            snap_data_inst_stats[date]["user calls"] = 0
+                            snap_data_inst_stats[date]["user commits"] = 0
+                            snap_data_inst_stats[date]["user commits/calls"] = 0
 
                             snap_data_time_model[date] = {}
                             snap_data_time_model[date]["parse time elapsed"] = 0
@@ -1786,17 +1791,24 @@ class AWRAnalyzer(object):
 
                             snap_data_profile[date]["Sessions (Begin)"] = int(report_line_words[5].replace(",", ""))
 
-                        elif not time_model_section and (report_line.startswith("Time Model") or report_line[1:].startswith("Time Model")):
+                        elif not time_model_section and (report_line.startswith("Time Model") or
+                                                         report_line[1:].startswith("Time Model")):
                             time_model_section = True
 
-                        elif not instance_stats_section and (report_line.startswith("Instance Activity Stats") or report_line[1:].startswith("Instance Activity Stats")):
+                        elif not instance_stats_section and \
+                                (report_line.startswith("Instance Activity Stats") or
+                                 report_line[1:].startswith("Instance Activity Stats")):
                             instance_stats_section = True
 
-                        elif time_model_section and (report_line.startswith("Foreground Wait Events") or report_line[1:].startswith("Foreground Wait Events")):
+                        elif time_model_section and \
+                                (report_line.startswith("Foreground Wait Events") or
+                                 report_line[1:].startswith("Foreground Wait Events") or
+                                 report_line.startswith(("Operating System Statistics"))):
                             time_model_section = False
-                            wait_class_section = True
+                            wait_class_section = False
 
-                        elif instance_stats_section and (report_line.startswith("IOStat") or report_line.startswith("IO Stat")):
+                        elif instance_stats_section and (report_line.startswith("IOStat") or
+                                                         report_line.startswith("IO Stat")):
                             instance_stats_section = False
 
                         elif time_model_section:
@@ -1810,6 +1822,8 @@ class AWRAnalyzer(object):
                                 if report_line.startswith(ist):
                                     ist_words = len(ist.split())
                                     snap_data_inst_stats[date][ist] = float(report_line_words[ist_words+1].replace(",", ""))
+                                    if report_line.startswith("user commits") and snap_data_inst_stats[date]["user commits"] < snap_data_inst_stats[date]["user calls"]:
+                                        snap_data_inst_stats[date]["user commits/calls"] = snap_data_inst_stats[date]["user commits"] / snap_data_inst_stats[date]["user calls"]
 
                         elif report_line.find("End Snap:") >= 0:
                             snap_data_profile[date]["Sessions (End)"] = int(report_line_words[5].replace(",", ""))
@@ -1820,8 +1834,14 @@ class AWRAnalyzer(object):
                         elif db_version >= "11.2.0.4.0" and report_line.startswith("Wait Classes by Total Wait Time"):
                             wait_class_section = True
 
-                        elif db_version < "11.2.0.4.0" and report_line.find("Foreground Wait Events") >= 0:
+                        elif db_version == "11.2.0.3.0" and report_line.startswith("Foreground Wait Class"):
                             wait_class_section = True
+
+                        elif db_version < "11.2.0.3.0" and report_line.find("Foreground Wait Events") >= 0:
+                            wait_class_section = True
+
+                        elif db_version == "11.2.0.3.0" and report_line[1:].startswith("Foreground Wait Events"):
+                            wait_class_section = False
 
                         elif report_line.find("Host CPU") >= 0:
                             host_cpu_section = True
@@ -1871,33 +1891,41 @@ class AWRAnalyzer(object):
                             load_profile_section = False
                             profile_pos = 0
 
-                        elif db_version >= "11.2.0.4.0" and len(report_line_words) > 2 \
+                        elif db_version >= "11.2.0.3.0" and len(report_line_words) > 2 \
                                 and (report_line_words[0] + " " + report_line_words[1] in self.event_classes) \
                                 and wait_class_section \
                                 and report_line.startswith(report_line_words[0]):
 
+                            value_field = 3
+                            if db_version == "11.2.0.3.0":
+                                value_field += 1
+
                             snap_data[date][report_line_words[0] + " " + report_line_words[1]] = \
-                                float(report_line_words[3].replace(",", ""))
+                                float(report_line_words[value_field].replace(",", ""))
 
                             if report_line.startswith("User I/O"):
                                 avg_value = 0
                                 if report_line_words[4].find("ms") > 0:
-                                    avg_value = float(report_line_words[4].replace(",", "").strip("ms"))
+                                    avg_value = float(report_line_words[value_field+1].replace(",", "").strip("ms"))
                                 elif report_line_words[4].find("us") > 0:
-                                    avg_value = float(report_line_words[4].replace(",", "").strip("us")) / 1000
+                                    avg_value = float(report_line_words[value_field+1].replace(",", "").strip("us")) / 1000
                                 else:
-                                    avg_value = float(report_line_words[4].replace(",", ""))
+                                    avg_value = float(report_line_words[value_field+1].replace(",", ""))
 
                                 snap_data_io_avg[date]["User I/O (avg ms)"] = avg_value
 
-                        elif db_version >= "11.2.0.4.0" and len(report_line_words) > 2 \
+                        elif db_version >= "11.2.0.3.0" and len(report_line_words) > 2 \
                              and (report_line_words[0] in self.event_classes) \
                              and wait_class_section \
                              and report_line.startswith(report_line_words[0]):
 
-                            snap_data[date][report_line_words[0]] = float(report_line_words[2].replace(",", ""))
+                            value_field = 2
+                            if db_version == "11.2.0.3.0":
+                                value_field += 1
 
-                        elif db_version < "11.2.0.4.0" and wait_class_section and len(report_line_long_words) >= 5 \
+                            snap_data[date][report_line_words[0]] = float(report_line_words[value_field].replace(",", ""))
+
+                        elif db_version < "11.2.0.3.0" and wait_class_section and len(report_line_long_words) >= 5 \
                                 and self.is_float(report_line_long_words[3]):
                             class_name = self.get_class_name(report_line_long_words[0])
 
@@ -1907,7 +1935,7 @@ class AWRAnalyzer(object):
                                 else:
                                     event_class_wait_sum[class_name] = float(report_line_long_words[3].replace(",", ""))
 
-                        elif db_version < "11.2.0.4.0" and report_line.find("Wait Event Histogram") >= 0 \
+                        elif db_version < "11.2.0.3.0" and report_line.find("Wait Event Histogram") >= 0 \
                                 and wait_class_section:
                             wait_class_section = False
 
@@ -2291,7 +2319,7 @@ if __name__ == '__main__':
     if len(sys.argv) == 3:
         aa = AWRAnalyzer(sys.argv[1], sys.argv[2])
         aa.plot()
-    elif len(sys.argv) == 4 and (sys.argv[3] == 'SQL' or sys.argv[3] == 'IO'):
+    elif len(sys.argv) == 4 and (sys.argv[3] == 'SQL' or sys.argv[3] == 'IO' or sys.argv[3].startswith('CLASS:')):
         aa = AWRAnalyzer(sys.argv[1], sys.argv[2], sys.argv[3])
         aa.plot()
 
@@ -2309,3 +2337,5 @@ if __name__ == '__main__':
         print("Details can be found on this blog: blog.ora-600.pl "
               "and GitHub: https://github.com/ora600pl/statspack_scripts")
 
+        aa = AWRAnalyzer("/Users/inter/Dropbox/ORA-600/Firmy/CANALPLUS/auditfiles/awry/NOV", "awrrpt_1")
+        aa.plot()
